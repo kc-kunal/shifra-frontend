@@ -50,20 +50,35 @@ function UserProvider({ children }) {
   }, [speaking]); // speaking dependency to restart properly
 
   async function speak(replyText) {
-    let textSpeak = new SpeechSynthesisUtterance(replyText);
-    textSpeak.volume = 1;
-    textSpeak.rate = 1;
-    textSpeak.pitch = 1;
-    textSpeak.lang = "hi-IN";
+  const synth = window.speechSynthesis;
 
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length) {
-      const hindiVoice = voices.find(v => v.lang === "hi-IN");
-      textSpeak.voice = hindiVoice || voices[0];
-    }
+  // Wait for voices to be loaded (important for Safari)
+  const loadVoices = () =>
+    new Promise((resolve) => {
+      let voices = synth.getVoices();
+      if (voices.length) return resolve(voices);
 
-    window.speechSynthesis.speak(textSpeak);
-  }
+      synth.onvoiceschanged = () => {
+        voices = synth.getVoices();
+        resolve(voices);
+      };
+    });
+
+  const voices = await loadVoices();
+
+  const textSpeak = new SpeechSynthesisUtterance(replyText);
+  textSpeak.volume = 1;
+  textSpeak.rate = 1;
+  textSpeak.pitch = 1;
+  textSpeak.lang = "hi-IN";
+
+  const hindiVoice = voices.find((v) => v.lang === "hi-IN");
+  textSpeak.voice = hindiVoice || voices[0];
+
+  synth.cancel(); // 👈 cancel any current speech (optional but recommended)
+  synth.speak(textSpeak);
+}
+
 
   async function getResponse(transcript) {
     const payload = {
