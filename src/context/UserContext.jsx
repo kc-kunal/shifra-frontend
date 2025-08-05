@@ -2,7 +2,7 @@ import React, { createContext, useState, useRef, useEffect } from "react";
 
 export const dataContext = createContext();
 
-const API = import.meta.env.VITE_APP_API_URL;
+const backendUrl = import.meta.env.VITE_APP_API_URL;
 
 function UserProvider({ children }) {
   const [speaking, setSpeaking] = useState(false);
@@ -76,7 +76,7 @@ function UserProvider({ children }) {
     };
 
     try {
-      const response = await fetch("https://backend-shifra.onrender.com/chat", {
+      const response = await fetch(`${backendUrl}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
