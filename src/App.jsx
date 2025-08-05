@@ -4,7 +4,7 @@ import { dataContext } from './context/UserContext';
 import UserProvider from './context/UserContext';
 
 function AppContent() {
-  const { speaking, setSpeaking, recogText, aiResponce, startListening } = useContext(dataContext);
+  const { speaking, setSpeaking, recogText, aiResponce, startListening,speak } = useContext(dataContext);
 
   return (
     <div className='h-full w-full flex justify-center items-center p-6 flex-col gap-5'>
@@ -17,6 +17,7 @@ function AppContent() {
         <button
           onClick={() => {
             setSpeaking(true);
+            speak("Ask Any thing")
             startListening();
           }}
           className='text-black text-[16px] p-1 flex justify-center items-center gap-3 font-semibold py-1 px-2 rounded-full bg-[rgb(79,224,234)] shadow-md shadow-[rgb(79,224,234)]'
