@@ -16,9 +16,10 @@ function AppContent() {
       {!speaking ? (
         <button
           onClick={() => {
-            setSpeaking(true);
+            
             speak("Ask Any thing")
-            startListening();
+            setTimeout(()=>{startListening(); setSpeaking(true);},3000)
+            
           }}
           className='text-black text-[16px] p-1 flex justify-center items-center gap-3 font-semibold py-1 px-2 rounded-full bg-[rgb(79,224,234)] shadow-md shadow-[rgb(79,224,234)]'
         >
