@@ -52,7 +52,7 @@ function UserProvider({ children }) {
   async function speak(replyText) {
   const synth = window.speechSynthesis;
 
-  // Wait for voices to be loaded (important for Safari)
+  // Wait for voices
   const loadVoices = () =>
     new Promise((resolve) => {
       let voices = synth.getVoices();
@@ -70,14 +70,16 @@ function UserProvider({ children }) {
   textSpeak.volume = 1;
   textSpeak.rate = 1;
   textSpeak.pitch = 1;
-  textSpeak.lang = "hi-IN";
 
-  const hindiVoice = voices.find((v) => v.lang === "hi-IN");
-  textSpeak.voice = hindiVoice || voices[0];
+  // Fallback if hi-IN not found
+  const voice = voices.find(v => v.lang === "hi-IN") || voices.find(v => v.lang.startsWith("en")) || voices[0];
+  textSpeak.voice = voice;
+  textSpeak.lang = voice.lang;
 
-  synth.cancel(); // 👈 cancel any current speech (optional but recommended)
+  synth.cancel(); // Clear any queued speech
   synth.speak(textSpeak);
 }
+
 
 
   async function getResponse(transcript) {
