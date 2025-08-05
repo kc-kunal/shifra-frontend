@@ -71,12 +71,21 @@ function UserProvider({ children }) {
   textSpeak.rate = 1;
   textSpeak.pitch = 1;
 
-  // Fallback if hi-IN not found
   const voice = voices.find(v => v.lang === "hi-IN") || voices.find(v => v.lang.startsWith("en")) || voices[0];
   textSpeak.voice = voice;
   textSpeak.lang = voice.lang;
 
   synth.cancel(); // Clear any queued speech
+
+  textSpeak.onend = () => {
+    // Restart listening after speech ends
+    if (!speaking) {  // If mic isn't already listening
+      setSpeaking(true);
+      recognition.current.start();
+      setRecogText("Listening...");
+    }
+  };
+
   synth.speak(textSpeak);
 }
 
