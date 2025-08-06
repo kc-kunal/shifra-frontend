@@ -8,23 +8,19 @@ function AppContent() {
   const [unsupported, setUnsupported] = useState(false);
 
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) setUnsupported(true);
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) setUnsupported(true);
   }, []);
 
   if (unsupported) {
-    return (
-      <div className="p-6 text-center text-red-500">
-        Sorry, your browser does not support speech recognition. Try Chrome or Android.
-      </div>
-    );
+    return <div className="text-red-500">Your browser doesn’t support voice. Try Chrome or Android.</div>;
   }
 
   return (
-    <div className="h-full w-full flex justify-center items-center p-6 flex-col gap-5">
+    <div className="flex flex-col items-center justify-center h-full p-6 gap-5">
       <img src="/images/ai.png" className="h-[450px] sm:h-72" alt="AI" />
-      <span className="font-semibold sm:text-[30px] bg-gradient-to-r from-[rgb(34,121,131)] to-[rgb(237,4,125)] bg-clip-text text-transparent text-center">
-        I'm Shifra. Your Advanced Virtual Assistant
+      <span className="bg-gradient-to-r from-teal-600 to-pink-600 bg-clip-text text-transparent text-center font-semibold sm:text-3xl">
+        I'm Shifra. Your Advance Virtual Assistant
       </span>
 
       {!speaking ? (
@@ -33,18 +29,18 @@ function AppContent() {
             speak("Ask anything");
             setTimeout(() => startListening(), 800);
           }}
-          className="text-black text-[16px] p-1 flex justify-center items-center gap-3 font-semibold py-1 px-2 rounded-full bg-[rgb(79,224,234)] shadow-md shadow-[rgb(79,224,234)]"
+          className="bg-cyan-200 text-black text-lg font-semibold px-4 py-2 rounded-full shadow"
         >
-          Start Listening <CiMicrophoneOn className="text-[20px]" />
+          Start Listening <CiMicrophoneOn className="inline text-2xl ml-2" />
         </button>
       ) : (
-        <div className="flex flex-col justify-center items-center">
+        <div className="flex flex-col items-center">
           {!aiResponce ? (
             <img src="/images/speak.gif" alt="Listening" className="w-16" />
           ) : (
-            <img src="/images/aiVoice.gif" alt="AI Talking" className="w-[50vh] h-20" />
+            <img src="/images/aiVoice.gif" alt="AI talking" className="w-[50vh] h-20" />
           )}
-          <p className="text-white text-[2vmax] text-center">{recogText}</p>
+          <p className="text-white text-2xl text-center">{recogText}</p>
         </div>
       )}
     </div>
