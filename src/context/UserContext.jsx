@@ -150,24 +150,46 @@ function UserProvider({ children }) {
     }
   };
 
-  const startListening = async () => {
+ const startListening = async () => {
+  try {
+    // Step 1: Request mic permission
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    // Step 2: Ensure SpeechRecognition is initialized
+    if (!recognition.current) {
+      console.warn("Recognition not initialized");
+      setRecogText("Speech recognition not ready");
+      return;
+    }
+
+    // Step 3: Prevent multiple starts (especially Android issue)
+    if (listening) {
+      console.warn("Recognition already started");
+      return;
+    }
+
+    // Step 4: Try starting recognition safely
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (listening) {
-        console.warn("Recognition already started");
-        return;
-      }
       recognition.current.start();
       setListening(true);
       setSpeaking(true);
       setRecogText("Listening...");
     } catch (err) {
-      console.error("Mic access or recognition start error:", err);
-      setRecogText("Mic access denied or error");
+      console.error("Recognition start error:", err);
+      setRecogText("Recognition failed to start");
       setSpeaking(false);
       setListening(false);
     }
-  };
+
+  } catch (err) {
+    // Step 5: Mic access error
+    console.error("Mic access error:", err);
+    setRecogText("Mic access denied or error");
+    setSpeaking(false);
+    setListening(false);
+  }
+};
+
 
   return (
     <dataContext.Provider
