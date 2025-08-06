@@ -49,17 +49,18 @@ function UserProvider({ children }) {
     };
 
     recognition.current.onend = () => {
-      setListening(false); // Recognition stopped
-      // Auto-restart recognition if speaking is true
-      if (speaking) {
-        try {
-          recognition.current.start();
-          setListening(true);
-        } catch (err) {
-          console.error("Failed to restart recognition:", err);
-        }
-      }
-    };
+  setListening(false); // 🔹 Mark as stopped
+
+  if (speaking) {
+    try {
+      recognition.current.start(); // 🔸 Restart if user is still speaking
+      setListening(true);
+    } catch (err) {
+      console.error("Failed to restart recognition:", err);
+    }
+  }
+};
+
 
     return () => {
       if (recognition.current) {
@@ -200,22 +201,36 @@ function UserProvider({ children }) {
   };
 
   // Start microphone listening with permissions check
-  const startListening = async () => {
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (recognition.current && !listening) {
-        recognition.current.start();
-        setListening(true);
-        setRecogText("Listening...");
-        setSpeaking(true);
-      }
-    } catch (err) {
-      console.error("🎤 Mic access or recognition start error:", err);
-      setRecogText("Mic access denied or error");
-      setSpeaking(false);
-      setListening(false);
+ const startListening = async () => {
+  try {
+    // Ask for microphone access
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    // Check if recognition is ready
+    if (!recognition.current) {
+      setRecogText("Speech recognition not ready");
+      return;
     }
-  };
+
+    // Prevent double start (common Android issue)
+    if (listening) {
+      console.warn("Recognition already started");
+      return;
+    }
+
+    // Start speech recognition
+    recognition.current.start();
+    setListening(true);
+    setSpeaking(true);
+    setRecogText("Listening...");
+  } catch (err) {
+    console.error("🎤 Mic access or recognition start error:", err);
+    setRecogText("Mic access denied or error");
+    setSpeaking(false);
+    setListening(false);
+  }
+};
+
 
   // Context data provided to components
   const data = {
