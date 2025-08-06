@@ -17,14 +17,14 @@ function UserProvider({ children }) {
       setRecogText("Speech Recognition not supported");
       return;
     }
+
     recognition.current = new SR();
     recognition.current.continuous = false;
     recognition.current.interimResults = false;
     recognition.current.lang = "en-IN";
 
     recognition.current.onresult = (event) => {
-      const lastIndex = event.results.length - 1;
-      const transcript = event.results[lastIndex][0].transcript;
+      const transcript = event.results?.[0]?.[0]?.transcript;
       if (transcript) {
         setRecogText(transcript);
         takeCommand(transcript.toLowerCase());
@@ -40,7 +40,7 @@ function UserProvider({ children }) {
 
     recognition.current.onend = () => {
       setListening(false);
-      if (speaking && !listening) {
+      if (speaking) {
         setTimeout(() => {
           try {
             recognition.current.start();
@@ -59,15 +59,20 @@ function UserProvider({ children }) {
 
   const speak = async (replyText) => {
     const synth = window.speechSynthesis;
-    const voices = await new Promise((r) => {
+    const voices = await new Promise((resolve) => {
       const v = synth.getVoices();
-      if (v.length) return r(v);
-      synth.onvoiceschanged = () => r(synth.getVoices());
+      if (v.length) return resolve(v);
+      synth.onvoiceschanged = () => resolve(synth.getVoices());
     });
+
     const msg = new SpeechSynthesisUtterance(replyText);
-    msg.voice = voices.find((v) => v.lang === "hi-IN") || voices.find((v) => v.lang.startsWith("en")) || voices[0];
-    msg.lang = msg.voice.lang;
+    msg.voice =
+      voices.find((v) => v.lang === "hi-IN") ||
+      voices.find((v) => v.lang.startsWith("en")) ||
+      voices[0];
+    msg.lang = msg.voice?.lang;
     msg.volume = msg.rate = msg.pitch = 1;
+
     synth.cancel();
     msg.onend = () => {
       setSpeaking(false);
@@ -85,6 +90,7 @@ function UserProvider({ children }) {
         }
       }, 400);
     };
+
     synth.speak(msg);
   };
 
@@ -104,8 +110,8 @@ function UserProvider({ children }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!response.ok) throw new Error(`Server error: ${response.status}`);
 
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
       const text = await response.text();
       let data;
       try {
@@ -150,46 +156,31 @@ function UserProvider({ children }) {
     }
   };
 
- const startListening = async () => {
-  try {
-    // Step 1: Request mic permission
-    await navigator.mediaDevices.getUserMedia({ audio: true });
-
-    // Step 2: Ensure SpeechRecognition is initialized
-    if (!recognition.current) {
-      console.warn("Recognition not initialized");
-      setRecogText("Speech recognition not ready");
-      return;
-    }
-
-    // Step 3: Prevent multiple starts (especially Android issue)
-    if (listening) {
-      console.warn("Recognition already started");
-      return;
-    }
-
-    // Step 4: Try starting recognition safely
+  const startListening = async () => {
     try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      if (!recognition.current) {
+        setRecogText("Speech recognition not ready");
+        return;
+      }
+
+      if (listening) {
+        console.warn("Recognition already started");
+        return;
+      }
+
       recognition.current.start();
       setListening(true);
       setSpeaking(true);
       setRecogText("Listening...");
     } catch (err) {
-      console.error("Recognition start error:", err);
-      setRecogText("Recognition failed to start");
+      console.error("Mic access error:", err);
+      setRecogText("Mic access denied or error");
       setSpeaking(false);
       setListening(false);
     }
-
-  } catch (err) {
-    // Step 5: Mic access error
-    console.error("Mic access error:", err);
-    setRecogText("Mic access denied or error");
-    setSpeaking(false);
-    setListening(false);
-  }
-};
-
+  };
 
   return (
     <dataContext.Provider
