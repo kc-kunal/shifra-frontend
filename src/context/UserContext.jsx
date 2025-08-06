@@ -1,24 +1,37 @@
 import React, { createContext, useState, useRef, useEffect } from "react";
 
+// Create context to share speech and recognition data
 export const dataContext = createContext();
 
+// Your backend API URL from environment variables
 const backendUrl = import.meta.env.VITE_APP_API_URL;
 
 function UserProvider({ children }) {
+  // States to track speaking status, recognized text, AI response flag
   const [speaking, setSpeaking] = useState(false);
   const [recogText, setRecogText] = useState("Listening...");
   const [aiResponce, setAiResponce] = useState(false);
+
+  // New flag to prevent double starting recognition
+  const [listening, setListening] = useState(false);
+
   const recognition = useRef(null);
 
   useEffect(() => {
     window.speechSynthesis.getVoices();
 
+    // Setup SpeechRecognition API
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setRecogText("Speech Recognition API not supported in this browser.");
+      return;
+    }
+
     recognition.current = new SpeechRecognition();
 
-    recognition.current.continuous = true; // continuous listening
-    recognition.current.interimResults = false;
-    recognition.current.lang = "en-IN";
+    recognition.current.continuous = true; // Keep listening continuously
+    recognition.current.interimResults = false; // Final results only
+    recognition.current.lang = "en-IN"; // Indian English
 
     recognition.current.onresult = (event) => {
       if (event.results && event.results[0]) {
@@ -32,12 +45,19 @@ function UserProvider({ children }) {
       console.error("🎤 Speech recognition error:", event.error);
       setRecogText("Mic error: " + event.error);
       setSpeaking(false);
+      setListening(false);
     };
 
     recognition.current.onend = () => {
-      // Auto restart recognition if speaking is true
+      setListening(false); // Recognition stopped
+      // Auto-restart recognition if speaking is true
       if (speaking) {
-        recognition.current.start();
+        try {
+          recognition.current.start();
+          setListening(true);
+        } catch (err) {
+          console.error("Failed to restart recognition:", err);
+        }
       }
     };
 
@@ -47,50 +67,59 @@ function UserProvider({ children }) {
         recognition.current = null;
       }
     };
-  }, [speaking]); // speaking dependency to restart properly
+  }, [speaking]);
 
+  // Text to speech function
   async function speak(replyText) {
-  const synth = window.speechSynthesis;
+    const synth = window.speechSynthesis;
 
-  // Wait for voices
-  const loadVoices = () =>
-    new Promise((resolve) => {
-      let voices = synth.getVoices();
-      if (voices.length) return resolve(voices);
+    const loadVoices = () =>
+      new Promise((resolve) => {
+        let voices = synth.getVoices();
+        if (voices.length) return resolve(voices);
+        synth.onvoiceschanged = () => {
+          voices = synth.getVoices();
+          resolve(voices);
+        };
+      });
 
-      synth.onvoiceschanged = () => {
-        voices = synth.getVoices();
-        resolve(voices);
-      };
-    });
+    const voices = await loadVoices();
 
-  const voices = await loadVoices();
+    const textSpeak = new SpeechSynthesisUtterance(replyText);
+    textSpeak.volume = 1;
+    textSpeak.rate = 1;
+    textSpeak.pitch = 1;
 
-  const textSpeak = new SpeechSynthesisUtterance(replyText);
-  textSpeak.volume = 1;
-  textSpeak.rate = 1;
-  textSpeak.pitch = 1;
+    // Prefer Hindi voice if available, else English or first voice
+    const voice =
+      voices.find((v) => v.lang === "hi-IN") ||
+      voices.find((v) => v.lang.startsWith("en")) ||
+      voices[0];
+    textSpeak.voice = voice;
+    textSpeak.lang = voice.lang;
 
-  const voice = voices.find(v => v.lang === "hi-IN") || voices.find(v => v.lang.startsWith("en")) || voices[0];
-  textSpeak.voice = voice;
-  textSpeak.lang = voice.lang;
+    synth.cancel(); // Clear queued speech
 
-  synth.cancel(); // Clear any queued speech
+    textSpeak.onend = () => {
+      // After speech ends, restart listening if not already listening
+      if (!speaking) {
+        setSpeaking(true);
+        if (recognition.current && !listening) {
+          try {
+            recognition.current.start();
+            setListening(true);
+            setRecogText("Listening...");
+          } catch (err) {
+            console.error("Failed to start recognition after speaking:", err);
+          }
+        }
+      }
+    };
 
-  textSpeak.onend = () => {
-    // Restart listening after speech ends
-    if (!speaking) {  // If mic isn't already listening
-      setSpeaking(true);
-      recognition.current.start();
-      setRecogText("Listening...");
-    }
-  };
+    synth.speak(textSpeak);
+  }
 
-  synth.speak(textSpeak);
-}
-
-
-
+  // Call backend API with transcript and get AI response
   async function getResponse(transcript) {
     const payload = {
       contents: [
@@ -108,7 +137,18 @@ function UserProvider({ children }) {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Invalid JSON from backend");
+      }
+
       const aireplyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "No reply received.";
       const replyText = aireplyText.replace(/google/gi, "kc kunal");
 
@@ -130,13 +170,17 @@ function UserProvider({ children }) {
     }
   }
 
+  // Interpret user commands or fallback to AI backend
   const takeCommand = (command) => {
     if (command.includes("open youtub")) {
       window.open("https://www.youtube.com/", "_blank");
       speak("opening youtube");
       setRecogText("opening youtube");
     } else if (command.includes("time") || command.includes("samay")) {
-      const time = new Date().toLocaleString(undefined, { hour: "numeric", minute: "numeric" });
+      const time = new Date().toLocaleString(undefined, {
+        hour: "numeric",
+        minute: "numeric",
+      });
       speak(time);
       setRecogText(time);
     } else if (command.includes("open instagram")) {
@@ -155,19 +199,25 @@ function UserProvider({ children }) {
     }, 7000);
   };
 
+  // Start microphone listening with permissions check
   const startListening = async () => {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      recognition.current.start();
-      setRecogText("Listening...");
-      setSpeaking(true);
+      if (recognition.current && !listening) {
+        recognition.current.start();
+        setListening(true);
+        setRecogText("Listening...");
+        setSpeaking(true);
+      }
     } catch (err) {
       console.error("🎤 Mic access or recognition start error:", err);
       setRecogText("Mic access denied or error");
       setSpeaking(false);
+      setListening(false);
     }
   };
 
+  // Context data provided to components
   const data = {
     speak,
     speaking,
