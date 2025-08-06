@@ -4,6 +4,10 @@ export const dataContext = createContext();
 
 const backendUrl = import.meta.env.VITE_APP_API_URL;
 
+if (!backendUrl) {
+  throw new Error("❌ VITE_APP_API_URL is not defined in environment variables.");
+}
+
 function UserProvider({ children }) {
   const [speaking, setSpeaking] = useState(false);
   const [recogText, setRecogText] = useState("Listening...");
@@ -11,54 +15,27 @@ function UserProvider({ children }) {
   const recognition = useRef(null);
 
   useEffect(() => {
-  window.speechSynthesis.getVoices();
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-  if (!SpeechRecognition) {
-    setRecogText("Speech Recognition not supported on this device or browser.");
-    console.error("SpeechRecognition API not supported.");
-    return;
-  }
-
-  recognition.current = new SpeechRecognition();
-
-  recognition.current.continuous = true;
-  recognition.current.interimResults = false;
-  recognition.current.lang = "en-IN";
-
-  recognition.current.onresult = (event) => {
-    if (event.results && event.results[0]) {
-      const transcript = event.results[0][0].transcript;
-      setRecogText(transcript);
-      takeCommand(transcript.toLowerCase());
+    if (!SpeechRecognition) {
+      console.warn("❌ SpeechRecognition not supported.");
+      setRecogText("Speech recognition not supported on this device/browser.");
+      return;
     }
-  };
 
-  recognition.current.onerror = (event) => {
-    console.error("🎤 Speech recognition error:", event.error);
-    setRecogText("Mic error: " + event.error);
-    setSpeaking(false);
-  };
+    window.speechSynthesis.getVoices();
+    recognition.current = new SpeechRecognition();
+    recognition.current.continuous = true;
+    recognition.current.interimResults = false;
+    recognition.current.lang = "en-IN";
 
-  recognition.current.onend = () => {
-    if (speaking) {
-      try {
-        recognition.current.start();
-      } catch (err) {
-        console.error("Auto-restart error:", err);
+    recognition.current.onresult = (event) => {
+      if (event.results && event.results[0]) {
+        const transcript = event.results[0][0].transcript;
+        setRecogText(transcript);
+        takeCommand(transcript.toLowerCase());
       }
-    }
-  };
-
-  return () => {
-    if (recognition.current) {
-      recognition.current.stop();
-      recognition.current = null;
-    }
-  };
-}, [speaking]);
-
+    };
 
     recognition.current.onerror = (event) => {
       console.error("🎤 Speech recognition error:", event.error);
@@ -67,9 +44,12 @@ function UserProvider({ children }) {
     };
 
     recognition.current.onend = () => {
-      // Auto restart recognition if speaking is true
       if (speaking) {
-        recognition.current.start();
+        try {
+          recognition.current.start();
+        } catch (err) {
+          console.error("Auto-restart failed:", err);
+        }
       }
     };
 
@@ -79,49 +59,43 @@ function UserProvider({ children }) {
         recognition.current = null;
       }
     };
-  } [speaking]; // speaking dependency to restart properly
+  }, [speaking]);
 
   async function speak(replyText) {
-  const synth = window.speechSynthesis;
+    const synth = window.speechSynthesis;
 
-  // Wait for voices
-  const loadVoices = () =>
-    new Promise((resolve) => {
-      let voices = synth.getVoices();
-      if (voices.length) return resolve(voices);
+    const loadVoices = () =>
+      new Promise((resolve) => {
+        let voices = synth.getVoices();
+        if (voices.length) return resolve(voices);
+        synth.onvoiceschanged = () => {
+          voices = synth.getVoices();
+          resolve(voices);
+        };
+      });
 
-      synth.onvoiceschanged = () => {
-        voices = synth.getVoices();
-        resolve(voices);
-      };
-    });
+    const voices = await loadVoices();
+    const voice = voices.find(v => v.lang === "hi-IN") || voices.find(v => v.lang.startsWith("en")) || voices[0];
 
-  const voices = await loadVoices();
+    const textSpeak = new SpeechSynthesisUtterance(replyText);
+    textSpeak.volume = 1;
+    textSpeak.rate = 1;
+    textSpeak.pitch = 1;
+    textSpeak.voice = voice;
+    textSpeak.lang = voice.lang;
 
-  const textSpeak = new SpeechSynthesisUtterance(replyText);
-  textSpeak.volume = 1;
-  textSpeak.rate = 1;
-  textSpeak.pitch = 1;
+    synth.cancel(); // Cancel any pending speech
 
-  const voice = voices.find(v => v.lang === "hi-IN") || voices.find(v => v.lang.startsWith("en")) || voices[0];
-  textSpeak.voice = voice;
-  textSpeak.lang = voice.lang;
+    textSpeak.onend = () => {
+      if (!speaking) {
+        setSpeaking(true);
+        recognition.current?.start();
+        setRecogText("Listening...");
+      }
+    };
 
-  synth.cancel(); // Clear any queued speech
-
-  textSpeak.onend = () => {
-    // Restart listening after speech ends
-    if (!speaking) {  // If mic isn't already listening
-      setSpeaking(true);
-      recognition.current.start();
-      setRecogText("Listening...");
-    }
-  };
-
-  synth.speak(textSpeak);
-}
-
-
+    synth.speak(textSpeak);
+  }
 
   async function getResponse(transcript) {
     const payload = {
@@ -190,7 +164,7 @@ function UserProvider({ children }) {
   const startListening = async () => {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      recognition.current.start();
+      recognition.current?.start();
       setRecogText("Listening...");
       setSpeaking(true);
     } catch (err) {
@@ -211,6 +185,6 @@ function UserProvider({ children }) {
   };
 
   return <dataContext.Provider value={data}>{children}</dataContext.Provider>;
-
+}
 
 export default UserProvider;
