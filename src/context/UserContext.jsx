@@ -11,22 +11,54 @@ function UserProvider({ children }) {
   const recognition = useRef(null);
 
   useEffect(() => {
-    window.speechSynthesis.getVoices();
+  window.speechSynthesis.getVoices();
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition.current = new SpeechRecognition();
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    recognition.current.continuous = true; // continuous listening
-    recognition.current.interimResults = false;
-    recognition.current.lang = "en-IN";
+  if (!SpeechRecognition) {
+    setRecogText("Speech Recognition not supported on this device or browser.");
+    console.error("SpeechRecognition API not supported.");
+    return;
+  }
 
-    recognition.current.onresult = (event) => {
-      if (event.results && event.results[0]) {
-        const transcript = event.results[0][0].transcript;
-        setRecogText(transcript);
-        takeCommand(transcript.toLowerCase());
+  recognition.current = new SpeechRecognition();
+
+  recognition.current.continuous = true;
+  recognition.current.interimResults = false;
+  recognition.current.lang = "en-IN";
+
+  recognition.current.onresult = (event) => {
+    if (event.results && event.results[0]) {
+      const transcript = event.results[0][0].transcript;
+      setRecogText(transcript);
+      takeCommand(transcript.toLowerCase());
+    }
+  };
+
+  recognition.current.onerror = (event) => {
+    console.error("🎤 Speech recognition error:", event.error);
+    setRecogText("Mic error: " + event.error);
+    setSpeaking(false);
+  };
+
+  recognition.current.onend = () => {
+    if (speaking) {
+      try {
+        recognition.current.start();
+      } catch (err) {
+        console.error("Auto-restart error:", err);
       }
-    };
+    }
+  };
+
+  return () => {
+    if (recognition.current) {
+      recognition.current.stop();
+      recognition.current = null;
+    }
+  };
+}, [speaking]);
+
 
     recognition.current.onerror = (event) => {
       console.error("🎤 Speech recognition error:", event.error);
@@ -47,7 +79,7 @@ function UserProvider({ children }) {
         recognition.current = null;
       }
     };
-  }, [speaking]); // speaking dependency to restart properly
+  } [speaking]; // speaking dependency to restart properly
 
   async function speak(replyText) {
   const synth = window.speechSynthesis;
@@ -179,6 +211,6 @@ function UserProvider({ children }) {
   };
 
   return <dataContext.Provider value={data}>{children}</dataContext.Provider>;
-}
+
 
 export default UserProvider;
