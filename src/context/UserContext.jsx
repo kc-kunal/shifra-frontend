@@ -24,7 +24,7 @@ function UserProvider({ children }) {
     recognition.current.lang = "en-IN";
 
     recognition.current.onresult = (event) => {
-      if (event.results && event.results[0]) {
+      if (event.results?.[0]) {
         const transcript = event.results[0][0].transcript;
         setRecogText(transcript);
         takeCommand(transcript.toLowerCase());
@@ -32,7 +32,7 @@ function UserProvider({ children }) {
     };
 
     recognition.current.onerror = (event) => {
-      console.error("🎤 Speech recognition error:", event.error);
+      console.error("Speech error:", event.error);
       setRecogText("Mic error: " + event.error);
       setSpeaking(false);
       setListening(false);
@@ -40,21 +40,20 @@ function UserProvider({ children }) {
 
     recognition.current.onend = () => {
       setListening(false);
-      if (speaking && !listening) {
+      if (speaking) {
+        // Restart if user still wants listening
         try {
           recognition.current.start();
           setListening(true);
         } catch (err) {
-          console.error("Failed to restart recognition:", err);
+          console.error("Restart failed:", err);
         }
       }
     };
 
     return () => {
-      if (recognition.current) {
-        recognition.current.stop();
-        recognition.current = null;
-      }
+      recognition.current?.stop();
+      recognition.current = null;
     };
   }, [speaking]);
 
@@ -64,40 +63,34 @@ function UserProvider({ children }) {
       new Promise((resolve) => {
         let voices = synth.getVoices();
         if (voices.length) return resolve(voices);
-        synth.onvoiceschanged = () => {
-          voices = synth.getVoices();
-          resolve(voices);
-        };
+        synth.onvoiceschanged = () => resolve(synth.getVoices());
       });
 
     const voices = await loadVoices();
     const textSpeak = new SpeechSynthesisUtterance(replyText);
-    textSpeak.volume = 1;
-    textSpeak.rate = 1;
-    textSpeak.pitch = 1;
-    const voice =
+    textSpeak.voice =
       voices.find((v) => v.lang === "hi-IN") ||
       voices.find((v) => v.lang.startsWith("en")) ||
       voices[0];
-    textSpeak.voice = voice;
-    textSpeak.lang = voice.lang;
+    textSpeak.lang = textSpeak.voice.lang;
+    textSpeak.volume = 1;
+    textSpeak.rate = 1;
+    textSpeak.pitch = 1;
 
     synth.cancel();
     textSpeak.onend = () => {
-      setSpeaking(false);
+      // Restart listening if needed
+      setSpeaking(true);
       setAiResponce(false);
-      setTimeout(() => {
-        if (recognition.current && !listening) {
-          try {
-            recognition.current.start();
-            setListening(true);
-            setRecogText("Listening...");
-            setSpeaking(true);
-          } catch (err) {
-            console.error("Failed to start recognition after speaking:", err);
-          }
+      if (recognition.current && !listening) {
+        try {
+          recognition.current.start();
+          setListening(true);
+          setRecogText("Listening...");
+        } catch (err) {
+          console.error("Speech restart failed:", err);
         }
-      }, 400); // slight delay
+      }
     };
 
     synth.speak(textSpeak);
@@ -114,31 +107,25 @@ function UserProvider({ children }) {
     };
 
     try {
-      const response = await fetch(`${backendUrl}/chat`, {
+      const res = await fetch(`${backendUrl}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error(`Server error: ${response.status}`);
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error("Invalid JSON from backend");
-      }
+      const raw = await res.text();
+      const data = JSON.parse(raw);
+      const reply =
+        data.candidates?.[0]?.content?.parts?.[0]?.text || "No reply received.";
 
-      const aireplyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "No reply received.";
-      const replyText = aireplyText.replace(/google/gi, "kc kunal");
-
-      setRecogText(replyText);
+      const finalReply = reply.replace(/google/gi, "kc kunal");
+      setRecogText(finalReply);
       setAiResponce(true);
-      speak(replyText);
+      speak(finalReply);
     } catch (err) {
-      console.error("Fetch error:", err);
+      console.error("Backend error:", err);
+      speak("माफ़ कीजिये, Kunal से जवाब नहीं मिल पाया");
       setRecogText("No response from backend.");
-      speak("माफ़ कीजिये, kc Kunal से जवाब नहीं मिल पाया");
       setSpeaking(false);
       setAiResponce(false);
     }
@@ -150,10 +137,7 @@ function UserProvider({ children }) {
       speak("opening youtube");
       setRecogText("opening youtube");
     } else if (command.includes("time") || command.includes("samay")) {
-      const time = new Date().toLocaleString(undefined, {
-        hour: "numeric",
-        minute: "numeric",
-      });
+      const time = new Date().toLocaleTimeString();
       speak(time);
       setRecogText(time);
     } else if (command.includes("open instagram")) {
@@ -174,14 +158,12 @@ function UserProvider({ children }) {
   const startListening = async () => {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-
       if (!recognition.current) {
-        setRecogText("Speech recognition not ready");
+        setRecogText("Speech recognition not initialized");
         return;
       }
-
       if (listening) {
-        console.warn("Recognition already started");
+        console.warn("Already listening...");
         return;
       }
 
@@ -190,24 +172,28 @@ function UserProvider({ children }) {
       setSpeaking(true);
       setRecogText("Listening...");
     } catch (err) {
-      console.error("🎤 Mic access or recognition start error:", err);
+      console.error("Mic error:", err);
       setRecogText("Mic access denied or error");
       setSpeaking(false);
       setListening(false);
     }
   };
 
-  const data = {
-    speak,
-    speaking,
-    setSpeaking,
-    recogText,
-    setRecogText,
-    aiResponce,
-    startListening,
-  };
-
-  return <dataContext.Provider value={data}>{children}</dataContext.Provider>;
+  return (
+    <dataContext.Provider
+      value={{
+        speak,
+        speaking,
+        setSpeaking,
+        recogText,
+        setRecogText,
+        aiResponce,
+        startListening,
+      }}
+    >
+      {children}
+    </dataContext.Provider>
+  );
 }
 
 export default UserProvider;

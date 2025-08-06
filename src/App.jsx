@@ -15,25 +15,23 @@ function AppContent() {
   if (unsupported) {
     return (
       <div className="p-6 text-center text-red-500">
-        Sorry, your browser does not support speech recognition. Please try on Chrome desktop or Android.
+        Sorry, your browser does not support speech recognition. Try Chrome or Android.
       </div>
     );
   }
 
   return (
     <div className="h-full w-full flex justify-center items-center p-6 flex-col gap-5">
-      <img src="/images/ai.png" className="h-[450px] sm:h-72" alt="AI Avatar" />
+      <img src="/images/ai.png" className="h-[450px] sm:h-72" alt="AI" />
       <span className="font-semibold sm:text-[30px] bg-gradient-to-r from-[rgb(34,121,131)] to-[rgb(237,4,125)] bg-clip-text text-transparent text-center">
-        I'm Shifra. Your Advance Virtual Assistant
+        I'm Shifra. Your Advanced Virtual Assistant
       </span>
 
       {!speaking ? (
         <button
           onClick={() => {
             speak("Ask anything");
-            setTimeout(() => {
-              startListening();
-            }, 1000);
+            setTimeout(() => startListening(), 800);
           }}
           className="text-black text-[16px] p-1 flex justify-center items-center gap-3 font-semibold py-1 px-2 rounded-full bg-[rgb(79,224,234)] shadow-md shadow-[rgb(79,224,234)]"
         >
