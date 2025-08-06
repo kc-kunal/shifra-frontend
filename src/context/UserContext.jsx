@@ -4,10 +4,6 @@ export const dataContext = createContext();
 
 const backendUrl = import.meta.env.VITE_APP_API_URL;
 
-if (!backendUrl) {
-  throw new Error("❌ VITE_APP_API_URL is not defined in environment variables.");
-}
-
 function UserProvider({ children }) {
   const [speaking, setSpeaking] = useState(false);
   const [recogText, setRecogText] = useState("Listening...");
@@ -15,17 +11,12 @@ function UserProvider({ children }) {
   const recognition = useRef(null);
 
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      console.warn("❌ SpeechRecognition not supported.");
-      setRecogText("Speech recognition not supported on this device/browser.");
-      return;
-    }
-
     window.speechSynthesis.getVoices();
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     recognition.current = new SpeechRecognition();
-    recognition.current.continuous = true;
+
+    recognition.current.continuous = true; // continuous listening
     recognition.current.interimResults = false;
     recognition.current.lang = "en-IN";
 
@@ -44,12 +35,9 @@ function UserProvider({ children }) {
     };
 
     recognition.current.onend = () => {
+      // Auto restart recognition if speaking is true
       if (speaking) {
-        try {
-          recognition.current.start();
-        } catch (err) {
-          console.error("Auto-restart failed:", err);
-        }
+        recognition.current.start();
       }
     };
 
@@ -59,43 +47,49 @@ function UserProvider({ children }) {
         recognition.current = null;
       }
     };
-  }, [speaking]);
+  }, [speaking]); // speaking dependency to restart properly
 
   async function speak(replyText) {
-    const synth = window.speechSynthesis;
+  const synth = window.speechSynthesis;
 
-    const loadVoices = () =>
-      new Promise((resolve) => {
-        let voices = synth.getVoices();
-        if (voices.length) return resolve(voices);
-        synth.onvoiceschanged = () => {
-          voices = synth.getVoices();
-          resolve(voices);
-        };
-      });
+  // Wait for voices
+  const loadVoices = () =>
+    new Promise((resolve) => {
+      let voices = synth.getVoices();
+      if (voices.length) return resolve(voices);
 
-    const voices = await loadVoices();
-    const voice = voices.find(v => v.lang === "hi-IN") || voices.find(v => v.lang.startsWith("en")) || voices[0];
+      synth.onvoiceschanged = () => {
+        voices = synth.getVoices();
+        resolve(voices);
+      };
+    });
 
-    const textSpeak = new SpeechSynthesisUtterance(replyText);
-    textSpeak.volume = 1;
-    textSpeak.rate = 1;
-    textSpeak.pitch = 1;
-    textSpeak.voice = voice;
-    textSpeak.lang = voice.lang;
+  const voices = await loadVoices();
 
-    synth.cancel(); // Cancel any pending speech
+  const textSpeak = new SpeechSynthesisUtterance(replyText);
+  textSpeak.volume = 1;
+  textSpeak.rate = 1;
+  textSpeak.pitch = 1;
 
-    textSpeak.onend = () => {
-      if (!speaking) {
-        setSpeaking(true);
-        recognition.current?.start();
-        setRecogText("Listening...");
-      }
-    };
+  const voice = voices.find(v => v.lang === "hi-IN") || voices.find(v => v.lang.startsWith("en")) || voices[0];
+  textSpeak.voice = voice;
+  textSpeak.lang = voice.lang;
 
-    synth.speak(textSpeak);
-  }
+  synth.cancel(); // Clear any queued speech
+
+  textSpeak.onend = () => {
+    // Restart listening after speech ends
+    if (!speaking) {  // If mic isn't already listening
+      setSpeaking(true);
+      recognition.current.start();
+      setRecogText("Listening...");
+    }
+  };
+
+  synth.speak(textSpeak);
+}
+
+
 
   async function getResponse(transcript) {
     const payload = {
@@ -164,7 +158,7 @@ function UserProvider({ children }) {
   const startListening = async () => {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      recognition.current?.start();
+      recognition.current.start();
       setRecogText("Listening...");
       setSpeaking(true);
     } catch (err) {
