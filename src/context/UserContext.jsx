@@ -18,12 +18,11 @@ function UserProvider({ children }) {
       return;
     }
     recognition.current = new SR();
-    recognition.current.continuous = true;
+    recognition.current.continuous = false;
     recognition.current.interimResults = false;
     recognition.current.lang = "en-IN";
 
     recognition.current.onresult = (event) => {
-      // Use the last result to get latest transcript
       const lastIndex = event.results.length - 1;
       const transcript = event.results[lastIndex][0].transcript;
       if (transcript) {
@@ -41,14 +40,13 @@ function UserProvider({ children }) {
 
     recognition.current.onend = () => {
       setListening(false);
-      if (speaking) {
-        // Small delay to prevent rapid restart issues
+      if (speaking && !listening) {
         setTimeout(() => {
           try {
             recognition.current.start();
             setListening(true);
           } catch (err) {
-            console.error("Restart recognition failed:", err);
+            console.error("Restart failed:", err);
           }
         }, 300);
       }
@@ -59,47 +57,35 @@ function UserProvider({ children }) {
     };
   }, [speaking]);
 
-  const speak = async (text) => {
+  const speak = async (replyText) => {
     const synth = window.speechSynthesis;
-    const voices = await new Promise((resolve) => {
-      let v = synth.getVoices();
-      if (v.length) return resolve(v);
-      synth.onvoiceschanged = () => {
-        v = synth.getVoices();
-        resolve(v);
-      };
+    const voices = await new Promise((r) => {
+      const v = synth.getVoices();
+      if (v.length) return r(v);
+      synth.onvoiceschanged = () => r(synth.getVoices());
     });
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.voice =
-      voices.find((v) => v.lang === "hi-IN") ||
-      voices.find((v) => v.lang.startsWith("en")) ||
-      voices[0];
-    utterance.lang = utterance.voice.lang;
-    utterance.volume = 1;
-    utterance.rate = 1;
-    utterance.pitch = 1;
-
+    const msg = new SpeechSynthesisUtterance(replyText);
+    msg.voice = voices.find((v) => v.lang === "hi-IN") || voices.find((v) => v.lang.startsWith("en")) || voices[0];
+    msg.lang = msg.voice.lang;
+    msg.volume = msg.rate = msg.pitch = 1;
     synth.cancel();
-
-    utterance.onend = () => {
+    msg.onend = () => {
       setSpeaking(false);
       setAiResponce(false);
       setTimeout(() => {
-        if (!listening) {
+        if (recognition.current && !listening) {
           try {
             recognition.current.start();
             setListening(true);
             setRecogText("Listening...");
             setSpeaking(true);
           } catch (err) {
-            console.error("Start recognition after speech failed:", err);
+            console.error("Restart after speech failed:", err);
           }
         }
       }, 400);
     };
-
-    synth.speak(utterance);
+    synth.speak(msg);
   };
 
   const getResponse = async (transcript) => {
